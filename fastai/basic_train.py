@@ -46,7 +46,7 @@ def validate(model:nn.Module, dl:DataLoader, loss_func:OptLossFunc=None, cb_hand
     model.eval()
     with torch.no_grad():
         val_losses,nums = [],[]
-        for xb,yb in progress_bar(dl, parent=pbar, leave=(pbar is not None), display=False, auto_update=False):
+        for xb,yb in progress_bar(dl, parent=pbar, leave=(pbar is not None), display=False):
             if cb_handler: xb, yb = cb_handler.on_batch_begin(xb, yb, train=False)
             val_losses.append(loss_batch(model, xb, yb, loss_func, cb_handler=cb_handler))
             if not is_listy(yb): yb = [yb]
@@ -79,7 +79,7 @@ def fit(epochs:int, model:nn.Module, loss_func:LossFunction, opt:optim.Optimizer
             model.train()
             cb_handler.on_epoch_begin()
 
-            for xb,yb in progress_bar(data.train_dl, parent=pbar, display=False, auto_update=False):
+            for xb,yb in progress_bar(data.train_dl, parent=pbar, display=False):
                 xb, yb = cb_handler.on_batch_begin(xb, yb)
                 loss = loss_batch(model, xb, yb, loss_func, opt, cb_handler)
                 if cb_handler.on_batch_end(loss): break
