@@ -79,7 +79,7 @@ def fit(epochs:int, model:nn.Module, loss_func:LossFunction, opt:optim.Optimizer
             model.train()
             cb_handler.on_epoch_begin()
 
-            for xb,yb in progress_bar(data.train_dl, parent=pbar):
+            for xb,yb in progress_bar(data.train_dl, parent=pbar, display=False):
                 xb, yb = cb_handler.on_batch_begin(xb, yb)
                 loss = loss_batch(model, xb, yb, loss_func, opt, cb_handler)
                 if cb_handler.on_batch_end(loss): break
