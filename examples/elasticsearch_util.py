@@ -4,7 +4,7 @@ from elasticsearch import Elasticsearch, helpers
 class ElasticsearchIterable(object):
 
     def __init__(self, elasticsearch_host='localhost', elasticsearch_port=9200, query=None,
-                 all_docs=False, step=1000, index=None, doc_type=None, request_timeout=10):
+                 all_docs=False, step=1000, index=None, doc_type=None, request_timeout=10, limit=None):
         """
         Um generator para jurisprudências a partir de uma consulta ao Elasticsearch.
 
@@ -27,16 +27,17 @@ class ElasticsearchIterable(object):
         self.doc_type = doc_type
         self.hits = None
         self.request_timeout = request_timeout
+        self.limit = limit
 
         self.client = Elasticsearch(self.elasticsearch_host,
-                               port=self.elasticsearch_port,
-                               request_timeout=self.request_timeout)
+                                    port=self.elasticsearch_port,
+                                    request_timeout=self.request_timeout)
         if self.all_docs is True:
             self.res = helpers.scan(client=self.client,
-                               size=self.step,
-                               query=self.query,
-                               index=self.index,
-                               doc_type=self.doc_type, request_timeout=self.request_timeout)
+                                    size=self.step,
+                                    query=self.query,
+                                    index=self.index,
+                                    doc_type=self.doc_type, request_timeout=self.request_timeout)
         else:
             self.res = self.client.search(index=self.index,
                                           body=self.query,
@@ -57,7 +58,18 @@ class ElasticsearchIterable(object):
             res = self.hits['hits']
         else:
             res = self.res
+        count = 0
         for doc in res:
+            if self.hits is not None:
+                total = self.hits['total']
+            else:
+                total = res.gi_frame.f_locals['resp']['hits']['total']
+            count += 1
+            if total is not None:
+                if (count % 10000 == 0) or (count == total):
+                    print('Retrieved %d records from %d so far' % (count, total))
+            if self.limit and count == self.limit:
+                break
             yield doc['_source']
 
     def __len__(self):
@@ -68,14 +80,15 @@ class ElasticsearchIterable(object):
 class AnexoIterable(ElasticsearchIterable):
 
     def __init__(self, ano, regiao, sort=True, all_docs=True, index='teste_anexos_renan_3', doc_type='anexo_trt',
-                 request_timeout=10):
+                 request_timeout=10, limit=None):
         super().__init__(query=get_query_anexos(ano, regiao, sort), elasticsearch_host='192.168.40.36',
-                         index=index, doc_type=doc_type, all_docs=all_docs, request_timeout=request_timeout)
+                         index=index, doc_type=doc_type, all_docs=all_docs, request_timeout=request_timeout,
+                         limit=limit)
 
 
 class RegiaoIterable(object):
 
-    def __init__(self, ano, regioes):
+    def __init__(self, ano, regioes, limit=None):
         """
         Um generator para jurisprudências a partir de uma consulta ao Elasticsearch.
 
@@ -83,33 +96,35 @@ class RegiaoIterable(object):
         """
         self.ano = ano
         self.regioes = regioes
+        self.limit = limit
 
     def __iter__(self):
         for regiao in self.regioes:
             print('pesquisando ano %d e região %d' % (self.ano, regiao))
-            anexos = AnexoIterable(self.ano, regiao, all_docs=True, request_timeout=60)
+            anexos = AnexoIterable(self.ano, regiao, all_docs=True, request_timeout=60, limit=self.limit)
             for anexo in anexos:
                 yield anexo
 
 
 class AnoIterable(object):
 
-    def __init__(self, anos, regioes):
+    def __init__(self, anos, regioes, limit=None):
         self.anos = anos
         self.regioes = regioes
+        self.limit = limit
 
     def __iter__(self):
         for ano in self.anos:
-            regiao_iterable = RegiaoIterable(ano, self.regioes)
+            regiao_iterable = RegiaoIterable(ano, self.regioes, limit=self.limit)
             for anexo in regiao_iterable:
                 yield anexo['corpo']
 
 
 def get_corpo_anexo(nome_arquivo, host='192.168.40.36', index="teste_anexos_renan_3"):
     query = {
-      "query": {
-        "query_string" : {"query" : "(arquivo.keyword:\"" + nome_arquivo + "\")"}
-      }
+        "query": {
+            "query_string": {"query": "(arquivo.keyword:\"" + nome_arquivo + "\")"}
+        }
     }
     es = Elasticsearch(host, port=9200)
     res = es.search(index=index, body=query)
